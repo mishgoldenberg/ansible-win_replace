@@ -1,0 +1,11 @@
+namespace: your_namespace
+name: windows
+version: 1.0.0
+readme: README.md
+authors:
+  - Your Name <your.email@example.com>
+description: >
+  Custom Windows-related Ansible modules, including win_replace for regex-based replacements on Windows files.
+license: MIT
+repository: https://github.com/your_namespace/ansible-windows
+issues: https://github.com/your_namespace/ansible-windows/issues

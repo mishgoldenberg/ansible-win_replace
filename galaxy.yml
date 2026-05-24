@@ -1,11 +1,12 @@
-namespace: your_namespace
+namespace: mishgoldenberg
 name: windows
 version: 1.0.0
 readme: README.md
 authors:
-  - Your Name <your.email@example.com>
+  - Mish Goldenberg <golden.mihel@gmail.com>
 description: >
   Custom Windows-related Ansible modules, including win_replace for regex-based replacements on Windows files.
-license: MIT
-repository: https://github.com/your_namespace/ansible-windows
-issues: https://github.com/your_namespace/ansible-windows/issues
+license:
+  - GPL-3.0-or-later
+repository: https://github.com/mishgoldenberg/ansible-win_replace
+issues: https://github.com/mishgoldenberg/ansible-win_replace/issues

@@ -33,6 +33,13 @@ options:
       - Create backup before modifying the file.
     type: bool
     default: false
+  encoding:
+    description:
+      - The encoding to use when reading and writing the file.
+      - Accepts any encoding name supported by .NET's C(System.Text.Encoding.GetEncoding).
+      - Defaults to C(utf8).
+    type: str
+    default: utf8
 '''
 
 EXAMPLES = r'''

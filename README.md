@@ -1,12 +1,13 @@
 <div align="center">
 
-# ansible-win_replace
+# 📝 win_replace
 
-**Regex-based text replacement for Windows files — an Ansible module built for Windows.**
+**Ansible module that performs regex-based text replacement in Windows files — handling CRLF line endings and .NET encodings that `ansible.builtin.replace` gets wrong.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Language: PowerShell](https://img.shields.io/badge/language-PowerShell-blue.svg)](plugins/modules/win_replace.ps1)
-[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6.svg)](https://docs.ansible.com/ansible/latest/os_guide/windows_usage.html)
+[![Ansible](https://img.shields.io/badge/Ansible-Collection-EE0000?style=for-the-badge&logo=ansible&logoColor=white)](https://docs.ansible.com/ansible/latest/collections_guide/index.html)
+[![PowerShell](https://img.shields.io/badge/PowerShell-Windows-5C2D91?style=for-the-badge&logo=powershell&logoColor=white)](https://learn.microsoft.com/en-us/powershell/)
+[![Python](https://img.shields.io/badge/Python-Module_Stub-3776AB?style=for-the-badge&logo=python&logoColor=white)](plugins/modules/win_replace.py)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 </div>
 
@@ -14,76 +15,72 @@
 
 ## What is this?
 
-Ansible ships with `ansible.builtin.replace` for Unix-style text replacement, but it does not work reliably on Windows because of CRLF line endings and encoding differences. `win_replace` is a drop-in Windows-native equivalent: it reads the file with a configurable .NET encoding, temporarily normalises line endings for regex matching, then writes the result back with the original CRLF endings intact.
+`ansible.builtin.replace` is built for Unix and breaks on Windows — it mishandles CRLF line endings and does not support .NET encodings, so regex anchors misbehave and files can be silently corrupted. `win_replace` is a drop-in Windows-native equivalent: it reads the file with a configurable .NET encoding, normalises line endings to LF so the regex engine sees clean lines, applies a full multiline regex replacement, then writes the result back with CRLF restored.
 
-It is packaged as an Ansible Collection module and integrates transparently with Ansible's check mode, diff mode, and backup utilities.
+It runs entirely on the Windows target host via PowerShell, integrates with Ansible's check mode and backup utilities, and is idempotent — it only reports `changed` when the file content actually differs.
 
 ---
 
-## Features
+## ✨ Features
 
-| Feature | Details |
+| | |
 |---|---|
-| Regex replacement | Full .NET `[regex]::Replace` with `Multiline` flag |
-| CRLF-safe | Normalises to LF for matching, restores CRLF on write |
-| Encoding support | Any .NET encoding (`utf8`, `utf-16`, `windows-1252`, …) |
-| Backup | Optional timestamped backup via `Ansible.ModuleUtils.Backup` |
-| Check mode | Dry-run support — reports what would change without writing |
-| Idempotent | Reports `changed: false` when content is already correct |
+| 🪟 **Windows-native** | Runs as PowerShell on the target host — no POSIX assumptions, no cross-OS surprises |
+| 🔄 **Regex replacement** | Full .NET `[regex]::Replace` with `Multiline` flag — `^` and `$` match per line |
+| 📄 **CRLF-safe** | Normalises to LF for matching, restores CRLF on write — files stay Windows-formatted |
+| 🔤 **Encoding support** | Any .NET encoding name: `utf8`, `utf-16`, `windows-1252`, and more |
+| 💾 **Backup** | Optional timestamped backup before any write via `Ansible.ModuleUtils.Backup` |
+| ✅ **Check mode** | Dry-run safe — reports what would change without writing anything |
+| ♻️ **Idempotent** | Returns `changed: false` when content already matches — safe to run repeatedly |
 
 ---
 
-## How it works
+## 🏗️ How it works
 
 ```
 Ansible controller
-       |
-       |  (WinRM / SSH)
-       v
-Windows target host
-       |
-       +-- win_replace.ps1 (executed by Ansible)
-              |
-              1. Read file with specified encoding
-              |
-              2. Normalise CRLF → LF
-              |
-              3. [regex]::Replace(content, regexp, replace, Multiline)
-              |
-              4. Restore LF → CRLF
-              |
-              5. Write back (unless check_mode or no change)
-              |
-              6. Return JSON result to Ansible
+       │
+       │  (WinRM / SSH)
+       ▼
+Windows target host — win_replace.ps1
+       │
+       ├── 1. Resolve path, fail if file not found
+       │
+       ├── 2. Read file with specified .NET encoding
+       │
+       ├── 3. Normalise CRLF ──► LF
+       │
+       ├── 4. [regex]::Replace(content, regexp, replace, Multiline)
+       │
+       ├── 5. Content changed?
+       │          │                         │
+       │         yes                        no
+       │          │                         │
+       │          ├── backup: true?         └──► msg: "No changes"
+       │          │     └── Backup-File         changed: false
+       │          │
+       │          ├── Restore LF ──► CRLF
+       │          └── Write file (skipped in check mode)
+       │
+       ▼
+    JSON result ──► Ansible (path, changed, msg, backup_file)
 ```
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-### 1. Clone / install the collection
+### 1. Clone and install the collection
 
 ```bash
 git clone https://github.com/mishgoldenberg/ansible-win_replace.git
-```
-
-Or install directly from the repository in your `requirements.yml`:
-
-```yaml
-collections:
-  - source: https://github.com/mishgoldenberg/ansible-win_replace.git
-    type: git
-    version: main
-```
-
-```bash
-ansible-galaxy collection install -r requirements.yml
+ansible-galaxy collection install ./ansible-win_replace
 ```
 
 ### 2. Reference the module in a playbook
 
 ```yaml
-- name: Replace a string in a config file
+- name: Replace a value in a config file
   mishgoldenberg.windows.win_replace:
     path: C:\App\config.ini
     regexp: 'server=old-host'
@@ -99,38 +96,38 @@ ansible-playbook -i inventory.ini playbook.yml
 
 ---
 
-## Configuration
+## ⚙️ Configuration Reference
 
-The module accepts the following parameters (all passed inline in the task):
+### Module parameters
 
 | Parameter | Required | Default | Description |
-|---|---|---|---|
-| `path` | yes | — | Absolute path to the target file on the Windows host. Aliases: `dest`, `destfile`, `name`. |
-| `regexp` | yes | — | .NET regular expression to match. `Multiline` mode is always enabled. |
-| `replace` | no | `""` | Replacement string. Supports .NET backreferences (`$1`, `${name}`). |
-| `backup` | no | `false` | If `true`, creates a timestamped backup of the file before writing. |
-| `encoding` | no | `utf8` | .NET encoding name used to read and write the file (e.g. `utf-16`, `windows-1252`). |
+|---|:---:|---|---|
+| `path` | ✅ | | Absolute path to the target file. Aliases: `dest`, `destfile`, `name` |
+| `regexp` | ✅ | | .NET regular expression to match. `Multiline` mode is always enabled |
+| `replace` | | `""` | Replacement string. Supports .NET backreferences (`$1`, `${name}`) |
+| `backup` | | `false` | Create a timestamped backup before writing |
+| `encoding` | | `utf8` | .NET encoding name used to read and write the file |
 
 ### Return values
 
 | Key | Type | Returned | Description |
 |---|---|---|---|
-| `path` | str | always | Path of the file targeted. |
-| `changed` | bool | always | Whether the file was modified. |
-| `msg` | str | always | Human-readable result (`"Replaced matching content"` or `"No changes"`). |
-| `backup_file` | str | when `backup: true` | Full path to the backup file created. |
+| `path` | str | always | Path of the file targeted |
+| `changed` | bool | always | Whether the file was modified |
+| `msg` | str | always | `"Replaced matching content"` or `"No changes"` |
+| `backup_file` | str | when `backup: true` | Full path to the backup file created |
 
 ---
 
-## Project structure
+## 🗂️ Project Structure
 
 ```
 ansible-win_replace/
 ├── plugins/
 │   └── modules/
-│       ├── win_replace.py   # Ansible module stub: DOCUMENTATION, EXAMPLES, RETURN
-│       └── win_replace.ps1  # PowerShell implementation executed on the Windows host
-├── galaxy.yml               # Ansible Galaxy collection metadata
+│       ├── win_replace.py    # Ansible module stub: DOCUMENTATION, EXAMPLES, RETURN
+│       └── win_replace.ps1   # PowerShell implementation executed on the Windows host
+├── galaxy.yml                # Ansible Galaxy collection metadata
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -138,37 +135,18 @@ ansible-win_replace/
 
 ---
 
-## Customisation
+## 🔧 Customisation
 
-**Custom encoding** — if your files are not UTF-8, pass `encoding: windows-1252` (or any encoding name accepted by `[System.Text.Encoding]::GetEncoding`):
+- **Use a non-UTF-8 encoding** — pass `encoding: windows-1252` (or any name accepted by `[System.Text.Encoding]::GetEncoding`) in the task when targeting legacy ANSI files.
 
-```yaml
-- name: Replace in a legacy ANSI config
-  mishgoldenberg.windows.win_replace:
-    path: C:\Legacy\app.cfg
-    regexp: 'OldValue'
-    replace: 'NewValue'
-    encoding: windows-1252
-```
+- **Match across multiple lines** — `Multiline` is always active so `^`/`$` are per-line anchors; use `[\s\S]` for patterns that must span line boundaries.
 
-**Multiline patterns** — the `Multiline` regex flag is always active, so `^` and `$` match the start/end of each line:
+- **Dry-run before applying** — run the playbook with `--check`; the module reads `_ansible_check_mode` and skips the write while still reporting `changed: true` if content would differ.
 
-```yaml
-- name: Remove a full line matching a pattern
-  mishgoldenberg.windows.win_replace:
-    path: C:\App\config.ini
-    regexp: '^debug=true\r?$'
-    replace: ''
-```
-
-**Check mode** — run with `--check` to see whether the file would change without writing anything:
-
-```bash
-ansible-playbook playbook.yml --check
-```
+- **Delete lines** — leave `replace` unset (defaults to `""`) and the matched text is removed; combine with `regexp: '^pattern\r?$'` to drop entire lines cleanly.
 
 ---
 
-## License
+## 📄 License
 
-[MIT](LICENSE) — Copyright (c) 2026 Mish Goldenberg
+[MIT](LICENSE) © 2026 Michael Goldenberg
